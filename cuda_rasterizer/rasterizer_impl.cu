@@ -24,6 +24,7 @@
 
 #include <cooperative_groups.h>
 #include <cooperative_groups/reduce.h>
+#include <c10/cuda/CUDAGuard.h>
 namespace cg = cooperative_groups;
 
 #include "auxiliary.h"
@@ -220,6 +221,7 @@ int CudaRasterizer::Rasterizer::forward(
 	int* radii,
 	bool debug)
 {
+	// const at::cuda::OptionalCUDAGuard device_guard((means3D).device().index());
 	const float focal_y = height / (2.0f * tan_fovy);
 	const float focal_x = width / (2.0f * tan_fovx);
 
@@ -374,6 +376,7 @@ void CudaRasterizer::Rasterizer::backward(
 	float* dL_drot,
 	bool debug)
 {
+	// const at::cuda::OptionalCUDAGuard device_guard((means3D).device().index());
 	GeometryState geomState = GeometryState::fromChunk(geom_buffer, P);
 	BinningState binningState = BinningState::fromChunk(binning_buffer, R);
 	ImageState imgState = ImageState::fromChunk(img_buffer, width * height);

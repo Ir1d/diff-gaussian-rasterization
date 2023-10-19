@@ -23,6 +23,7 @@
 #include <fstream>
 #include <string>
 #include <functional>
+#include <c10/cuda/CUDAGuard.h>
 
 std::function<char*(size_t N)> resizeFunctional(torch::Tensor& t) {
     auto lambda = [&t](size_t N) {
@@ -57,20 +58,28 @@ RasterizeGaussiansCUDA(
   if (means3D.ndimension() != 2 || means3D.size(1) != 3) {
     AT_ERROR("means3D must have dimensions (num_points, 3)");
   }
-  
+  const auto current_device = c10::cuda::current_device(); 
+  const at::cuda::CUDAGuard device_guard((means3D).device());
+//   c10::cuda::set_device(means3D.get_device());
+
   const int P = means3D.size(0);
   const int H = image_height;
   const int W = image_width;
 
-  auto int_opts = means3D.options().dtype(torch::kInt32);
-  auto float_opts = means3D.options().dtype(torch::kFloat32);
+  // auto index_optional = means3D.options().device().index().value_or(0);
+  auto means3D_device = means3D.device();
+  // auto index_optional = means3D_device.index();
+  c10::DeviceIndex device_index = means3D_device.index();
+  torch::Device device(torch::kCUDA, device_index);	
+
+  auto int_opts = means3D.options().dtype(torch::kInt32).device(device);
+  auto float_opts = means3D.options().dtype(torch::kFloat32).device(device);
 
   torch::Tensor out_color = torch::full({NUM_CHANNELS, H, W}, 0.0, float_opts);
   torch::Tensor out_depth = torch::full({1, H, W}, 0.0, float_opts);
   torch::Tensor out_alpha = torch::full({1, H, W}, 0.0, float_opts);
-  torch::Tensor radii = torch::full({P}, 0, means3D.options().dtype(torch::kInt32));
-  
-  torch::Device device(torch::kCUDA);
+  torch::Tensor radii = torch::full({P}, 0, means3D.options().dtype(torch::kInt32).device(device));
+
   torch::TensorOptions options(torch::kByte);
   torch::Tensor geomBuffer = torch::empty({0}, options.device(device));
   torch::Tensor binningBuffer = torch::empty({0}, options.device(device));
@@ -115,6 +124,7 @@ RasterizeGaussiansCUDA(
 		radii.contiguous().data<int>(),
 		debug);
   }
+//   c10::cuda::set_device(current_device);
   return std::make_tuple(rendered, out_color, out_depth, out_alpha, radii, geomBuffer, binningBuffer, imgBuffer);
 }
 
@@ -145,9 +155,14 @@ std::tuple<torch::Tensor, torch::Tensor, torch::Tensor, torch::Tensor, torch::Te
 	const torch::Tensor& alphas,
 	const bool debug) 
 {
+  const auto current_device = c10::cuda::current_device(); 
+  const at::cuda::CUDAGuard device_guard((means3D).device());
+//   c10::cuda::set_device(means3D.get_device());
+
   const int P = means3D.size(0);
   const int H = dL_dout_color.size(1);
   const int W = dL_dout_color.size(2);
+  torch::Device device(torch::kCUDA, means3D.device().index());
   
   int M = 0;
   if(sh.size(0) != 0)
@@ -202,6 +217,7 @@ std::tuple<torch::Tensor, torch::Tensor, torch::Tensor, torch::Tensor, torch::Te
 	  debug);
   }
 
+//   c10::cuda::set_device(current_device);
   return std::make_tuple(dL_dmeans2D, dL_dcolors, dL_dopacity, dL_dmeans3D, dL_dcov3D, dL_dsh, dL_dscales, dL_drotations);
 }
 
@@ -210,9 +226,14 @@ torch::Tensor markVisible(
 		torch::Tensor& viewmatrix,
 		torch::Tensor& projmatrix)
 { 
+  const auto current_device = c10::cuda::current_device(); 
+  const at::cuda::CUDAGuard device_guard((means3D).device());
+//   c10::cuda::set_device(means3D.get_device());
   const int P = means3D.size(0);
-  
-  torch::Tensor present = torch::full({P}, false, means3D.options().dtype(at::kBool));
+  torch::Device device(torch::kCUDA, means3D.device().index());
+  torch::TensorOptions options(torch::kByte);
+  options = options.device(device).dtype(at::kBool);
+  torch::Tensor present = torch::full({P}, false, options);
  
   if(P != 0)
   {
@@ -222,6 +243,6 @@ torch::Tensor markVisible(
 		projmatrix.contiguous().data<float>(),
 		present.contiguous().data<bool>());
   }
-  
+//   c10::cuda::set_device(current_device);
   return present;
 }

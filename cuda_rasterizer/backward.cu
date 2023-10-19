@@ -13,6 +13,8 @@
 #include "auxiliary.h"
 #include <cooperative_groups.h>
 #include <cooperative_groups/reduce.h>
+// #include <c10/cuda/CUDAGuard.h>
+
 namespace cg = cooperative_groups;
 
 // Backward pass for conversion of spherical harmonics to RGB for
@@ -604,6 +606,7 @@ void BACKWARD::preprocess(
 	glm::vec3* dL_dscale,
 	glm::vec4* dL_drot)
 {
+	// const at::cuda::OptionalCUDAGuard device_guard((means3D).device().index());
 	// Propagate gradients for the path of 2D conic matrix computation. 
 	// Somewhat long, thus it is its own kernel rather than being part of 
 	// "preprocess". When done, loss gradient w.r.t. 3D means has been
@@ -665,6 +668,7 @@ void BACKWARD::render(
 	float* dL_dopacity,
 	float* dL_dcolors)
 {
+	// const at::cuda::OptionalCUDAGuard device_guard((means2D).device().index());
 	renderCUDA<NUM_CHANNELS> << <grid, block >> >(
 		ranges,
 		point_list,
